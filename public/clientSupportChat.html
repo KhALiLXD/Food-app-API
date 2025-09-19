@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Customer Support Chat</title>
+  <style>
+    body { font-family: sans-serif; }
+    #chat-box { width: 400px; height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
+    #message-input { width: 300px; }
+    #typing-indicator { color: gray; font-style: italic; display: none; }
+  </style>
+</head>
+<body>
+  <h1>Customer Chat</h1>
+  <div id="chat-box"></div>
+  <input type="text" id="message-input" placeholder="Type a message...">
+  <button id="send-button">Send</button>
+  <div id="typing-indicator">Support agent is typing...</div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io('http://localhost:2525');
+    const userId = 'user_123'; 
+
+    const chatBox = document.getElementById('chat-box');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const typingIndicator = document.getElementById('typing-indicator');
+
+    socket.on('connect', () => {
+      console.log('Connected to server.');
+      socket.emit('join_chat', userId);
+    });
+
+    socket.on('receive_message', (data) => {
+      const p = document.createElement('p');
+      p.textContent = `${data.from}: ${data.text}`;
+      chatBox.appendChild(p);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+
+    sendButton.addEventListener('click', () => {
+      const message = messageInput.value;
+      if (message) {
+        socket.emit('send_message', { userId, message });
+        messageInput.value = '';
+      }
+    });
+
+    let typingTimeout;
+    messageInput.addEventListener('input', () => {
+      socket.emit('typing', userId);
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+      }, 1000);
+    });
+
+  </script>
+</body>
+</html>
