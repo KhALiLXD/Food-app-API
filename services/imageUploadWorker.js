@@ -51,7 +51,7 @@ async function main() {
 
     try {
       await publish({ userId, imageId, status: 'processing', step: 'validate', progress: 5 });
-      // basic validation: ensure readable and plausible size
+
       const stat = await runWithRetries(() => fsp.stat(imagePath));
       if (stat.size < 2 * 1024 * 1024 || stat.size > 10 * 1024 * 1024) {
         throw new Error('File size out of allowed range (2MB-10MB)');

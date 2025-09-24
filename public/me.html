@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile (Session Test)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f7f7f8; margin:0; padding:20px; }
+    .card { max-width:720px; margin:40px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; box-shadow:0 10px 20px rgba(0,0,0,0.04); }
+    h1 { margin:0 0 16px; font-size:22px; }
+    pre { background:#0b1020; color:#e2e8f0; padding:16px; border-radius:8px; overflow:auto; }
+    .row { display:flex; gap:12px; margin-top:16px; }
+    .row a, .row button { display:inline-block; padding:10px 14px; border-radius:8px; border:1px solid #d1d5db; background:#fff; color:#111827; text-decoration:none; cursor:pointer; }
+  </style>
+  <script>
+    async function loadProfile() {
+      const out = document.getElementById('out');
+      out.textContent = 'Loading...';
+      try {
+        const res = await fetch('/user/profile/', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = '/login.html';
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function logout() {
+      window.location.href = '/login.html';
+    }
+
+    window.addEventListener('DOMContentLoaded', loadProfile);
+  </script>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Session check</h1>
+      <div class="row">
+        <a href="/login.html">Login</a>
+        <a href="/register.html">Register</a>
+        <a href="/sse-image-progress-test.html">upload an image</a>     
+      </div>
+      <div class="row">
+           <a href="/agentchat.html">Agent support chat</a>
+        <a href="/clientSupportChat.html">Client support chat</a>
+      </div>
+      <h3 style="margin-top:18px;">/user/profile/ response</h3>
+      <pre id="out"></pre>
+    </div>
+  </body>
+  </html>
+
+

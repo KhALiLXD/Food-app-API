@@ -11,7 +11,6 @@ const IMAGE_PROGRESS_CHANNEL = 'image-progress-channel';
 
 const sseClients = {};
 
-// SSE endpoint handler
 exports.handleSseProgress = (req, res) => {
     const { imageId } = req.params;
     const userId = req.session.user.id;
@@ -29,7 +28,6 @@ exports.handleSseProgress = (req, res) => {
     });
 };
 
-// Initialize a dedicated subscriber connection so the shared client never enters subscriber mode
 (async () => {
     try {
         await ready;
@@ -42,7 +40,6 @@ exports.handleSseProgress = (req, res) => {
             if (client) {
                 client.write(`data: ${JSON.stringify(data)}\n\n`);
                 if (data.status === 'completed' || data.status === 'error') {
-                    // close SSE for this client after terminal state
                     client.end();
                     delete sseClients[clientId];
                 }
@@ -58,7 +55,6 @@ exports.uploadImage = async (req, res) => {
         return res.status(400).send('No file uploaded.');
     }
 
-    // Immediate validation to surface errors before SSE connection
     const minBytes = 2 * 1024 * 1024; // 2MB
     if (req.file.size < minBytes) {
         return res.status(400).json({ error: 'File too small. Minimum size is 2MB.' });
@@ -67,7 +63,6 @@ exports.uploadImage = async (req, res) => {
     const userId = req.session.user.id;
     const imageId = uuidv4();
 
-    // Persist the uploaded file to disk under public/uploads/incoming
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
     const incomingDir = path.join(uploadsDir, 'incoming');
     try {
@@ -90,7 +85,6 @@ exports.uploadImage = async (req, res) => {
         res.status(202).json({
             message: 'Image upload received, processing in background.',
             imageId: imageId,
-            // Public SSE URL
             sseUrl: `/upload/image-upload-progress/${imageId}`
         });
     } catch (e) {

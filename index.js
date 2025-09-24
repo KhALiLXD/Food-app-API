@@ -36,7 +36,7 @@ app.use(session({
 const PUBLIC_PATHS = [
     '/auth/login',
     '/auth/register',
-    '/health/redis'
+    '/health/redis',
 ];
 
 app.use((req, res, next) => {

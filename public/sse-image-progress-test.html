@@ -45,125 +45,154 @@
 
     <div id="preview"></div>
 
-    <script>
-        const statusEl = document.getElementById('status');
-        const logEl = document.getElementById('log');
-        const previewEl = document.getElementById('preview');
-        const imageIdInput = document.getElementById('imageId');
-        const connectBtn = document.getElementById('connectBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const uploadForm = document.getElementById('uploadForm');
-        const imageFileInput = document.getElementById('imageFile');
+   <script>
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const previewEl = document.getElementById('preview');
+  const imageIdInput = document.getElementById('imageId');
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  const uploadForm = document.getElementById('uploadForm');
+  const imageFileInput = document.getElementById('imageFile');
 
-        let es;
+  let es;
+  let closedByApp = false;
 
-        function log(line) {
-            const ts = new Date().toLocaleTimeString();
-            logEl.textContent += `[${ts}] ${line}\n`;
-            logEl.scrollTop = logEl.scrollHeight;
+  function log(line) {
+    const ts = new Date().toLocaleTimeString();
+    logEl.textContent += `[${ts}] ${line}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(s) { statusEl.textContent = `Status: ${s}`; }
+
+  function safelyClose(reason = 'manual') {
+    try { closedByApp = true; es && es.close(); } catch {}
+    es = undefined;
+    setStatus('disconnected');
+    connectBtn.disabled = false;
+    disconnectBtn.disabled = true;
+    log(`SSE closed (${reason})`);
+  }
+
+  function openSSE(url) {
+    if (es) safelyClose('reopen');
+    closedByApp = false;
+
+    log(`Connecting to ${url}`);
+    setStatus('connecting');
+    previewEl.innerHTML = '';
+
+    es = new EventSource(url, { withCredentials: true });
+
+    es.onopen = () => {
+      setStatus('connected');
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+      log('SSE opened');
+    };
+
+    es.onerror = () => {
+      // لما السيرفر يقفل الستريم طبيعيًا، EventSource بينادي onerror.
+      // إذا الإغلاق متعمد أو الحالة CLOSED، لا تسجّلها كـ error.
+      if (closedByApp || (es && es.readyState === EventSource.CLOSED)) {
+        setStatus('disconnected');
+        log('SSE closed by server/client');
+        return;
+      }
+      setStatus('error (check network/session)');
+      log('SSE error');
+    };
+
+    es.onmessage = (evt) => {
+      log(`message: ${evt.data}`);
+      try {
+        const data = JSON.parse(evt.data);
+
+        if (data.status === 'completed' && data.publicUrl) {
+          const link = document.createElement('a');
+          link.href = data.publicUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = `Open processed image (${data.publicUrl})`;
+
+          const img = document.createElement('img');
+          img.src = data.publicUrl;
+          img.alt = 'processed image';
+
+          previewEl.innerHTML = '';
+          previewEl.appendChild(link);
+          previewEl.appendChild(document.createElement('br'));
+          previewEl.appendChild(img);
         }
 
-        function setStatus(s) { statusEl.textContent = `Status: ${s}`; }
-
-        function openSSE(url) {
-            if (es) es.close();
-            log(`Connecting to ${url}`);
-            setStatus('connecting');
-            previewEl.innerHTML = '';
-
-            es = new EventSource(url, { withCredentials: true });
-
-            es.onopen = () => {
-                setStatus('connected');
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
-                log('SSE opened');
-            };
-
-            es.onerror = () => {
-                setStatus('error (check network/session)');
-                log('SSE error');
-            };
-
-            es.onmessage = (evt) => {
-                log(`message: ${evt.data}`);
-                try {
-                    const data = JSON.parse(evt.data);
-                    if (data.status === 'completed' && data.publicUrl) {
-                        const link = document.createElement('a');
-                        link.href = data.publicUrl;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                        link.textContent = `Open processed image (${data.publicUrl})`;
-
-                        const img = document.createElement('img');
-                        img.src = data.publicUrl;
-                        img.alt = 'processed image';
-
-                        previewEl.innerHTML = '';
-                        previewEl.appendChild(link);
-                        previewEl.appendChild(document.createElement('br'));
-                        previewEl.appendChild(img);
-                    }
-                } catch {}
-            };
+        // سكّر الاتصال فور الاكتمال عشان تمنع الـ auto-reconnect و"SError"
+        if (data.status === 'completed') {
+          safelyClose('completed');
         }
+      } catch {
+        // تجاهل رسائل ليست JSON (تعليقات keep-alive مثلاً)
+      }
+    };
 
-        connectBtn.addEventListener('click', () => {
-            const imageId = imageIdInput.value.trim();
-            if (!imageId) {
-                alert('Enter imageId');
-                return;
-            }
-            const url = `/upload/image-upload-progress/${encodeURIComponent(imageId)}`;
-            openSSE(url);
-        });
+    // (اختياري) لو السيرفر بيبعت event باسم end قبل الإغلاق
+    es.addEventListener('end', (evt) => {
+      log(`end: ${evt.data || ''}`);
+      safelyClose('end-event');
+    });
+  }
 
-        disconnectBtn.addEventListener('click', () => {
-            if (es) {
-                es.close();
-                es = undefined;
-                setStatus('disconnected');
-                connectBtn.disabled = false;
-                disconnectBtn.disabled = true;
-                log('SSE closed');
-            }
-        });
+  connectBtn.addEventListener('click', () => {
+    const imageId = imageIdInput.value.trim();
+    if (!imageId) {
+      alert('Enter imageId');
+      return;
+    }
+    const url = `/upload/image-upload-progress/${encodeURIComponent(imageId)}`;
+    openSSE(url);
+  });
 
-        uploadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const file = imageFileInput.files && imageFileInput.files[0];
-            if (!file) {
-                alert('Choose an image file first');
-                return;
-            }
-            try {
-                setStatus('uploading...');
-                log(`Uploading: ${file.name}`);
-                const form = new FormData();
-                form.append('image', file);
-                const resp = await fetch('/upload/upload-image', {
-                    method: 'POST',
-                    body: form,
-                    credentials: 'include'
-                });
-                if (!resp.ok) {
-                    const txt = await resp.text().catch(() => '');
-                    throw new Error(`Upload failed (${resp.status}): ${txt}`);
-                }
-                const data = await resp.json();
-                log(`Upload accepted. imageId=${data.imageId}`);
-                if (data.imageId) imageIdInput.value = data.imageId;
-                if (data.sseUrl) {
-                    openSSE(data.sseUrl);
-                } else if (data.imageId) {
-                    openSSE(`/upload/image-upload-progress/${encodeURIComponent(data.imageId)}`);
-                }
-            } catch (e) {
-                setStatus('upload error');
-                log(`Upload error: ${e?.message || e}`);
-            }
-        });
-    </script>
+  disconnectBtn.addEventListener('click', () => {
+    if (es) {
+      safelyClose('manual');
+    }
+  });
+
+  uploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = imageFileInput.files && imageFileInput.files[0];
+    if (!file) {
+      alert('Choose an image file first');
+      return;
+    }
+    try {
+      setStatus('uploading...');
+      log(`Uploading: ${file.name}`);
+      const form = new FormData();
+      form.append('image', file);
+      const resp = await fetch('/upload/upload-image', {
+        method: 'POST',
+        body: form,
+        credentials: 'include'
+      });
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => '');
+        throw new Error(`Upload failed (${resp.status}): ${txt}`);
+      }
+      const data = await resp.json();
+      log(`Upload accepted. imageId=${data.imageId}`);
+      if (data.imageId) imageIdInput.value = data.imageId;
+      if (data.sseUrl) {
+        openSSE(data.sseUrl);
+      } else if (data.imageId) {
+        openSSE(`/upload/image-upload-progress/${encodeURIComponent(data.imageId)}`);
+      }
+    } catch (e) {
+      setStatus('upload error');
+      log(`Upload error: ${e?.message || e}`);
+    }
+  });
+</script>
+
 </body>
 </html> 
